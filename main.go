@@ -2,7 +2,9 @@ package main
 
 import (
 	"bufio"
+	"flag"
 	"fmt"
+	"io"
 	"os"
 	"strconv"
 	"strings"
@@ -24,7 +26,15 @@ const (
 )
 
 const timeoutDuration = time.Millisecond * 200
-const debugPrint = true
+
+var (
+	debugPrint bool
+)
+
+func init() {
+	flag.BoolVar(&debugPrint, "debug", false, "Enable debug output")
+	flag.Parse()
+}
 
 var tokenLookup = map[byte]Token{
 	'>': IncrementPointer,
@@ -188,8 +198,6 @@ func (bf *BrainfuckInterpreter) execute() {
 			bf.executeStep()
 		}
 	}
-
-	fmt.Printf("Final Output:\n%s\n", bf.output.String())
 }
 
 func (bf *BrainfuckInterpreter) findMatchingLoopStart(endIndex int) int {
@@ -225,14 +233,34 @@ func (bf *BrainfuckInterpreter) findMatchingLoopEnd(startIndex int) int {
 }
 
 func main() {
-	brainfuckCode := `
-	>++++++++[<+++++++++>-]<.>++++[<+++++++>-]<+.+++++++..+++.>>++++++[<+++++++>-]<+
-	+.------------.>++++++[<+++++++++>-]<+.<.+++.------.--------.>>>++++[<++++++++>-
-	]<+.
-	`
+	var code string
+
+	stat, _ := os.Stdin.Stat()
+	if (stat.Mode() & os.ModeCharDevice) == 0 {
+		// Read from pipe
+		pipedBytes, _ := io.ReadAll(os.Stdin)
+		code = string(pipedBytes)
+	} else {
+		if len(flag.Args()) == 0 {
+			fmt.Println("Usage: brainfuck [-debug] <input_file>")
+			return
+		}
+
+		inputFile := flag.Arg(0)
+
+		fileContent, err := os.ReadFile(inputFile)
+		if err != nil {
+			fmt.Printf("Error reading input file: %v\n", err)
+			return
+		}
+		code = string(fileContent)
+	}
 
 	interpreter := NewBrainfuckInterpreter()
-	interpreter.loadCode(brainfuckCode)
+	interpreter.loadCode(code)
 	interpreter.showTapeState = debugPrint
 	interpreter.execute()
+
+	// Write the output to stdout
+	fmt.Print(interpreter.output.String())
 }
